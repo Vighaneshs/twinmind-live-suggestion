@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  color: #0a2f3c;
+  /* Soft cyan -> cream mist gradient matching the reference */
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #cfe6ec 0%, transparent 60%),
+    radial-gradient(1000px 700px at 110% 10%, #e9dfcf 0%, transparent 55%),
+    linear-gradient(180deg, #bcd6dc 0%, #d6e3e3 45%, #e9e0cf 100%);
+  background-attachment: fixed;
+}
+
+/* Subtle, theme-matched scrollbar */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: rgba(14, 58, 74, 0.18); border-radius: 4px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(14, 58, 74, 0.32); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Reusable frosted-pill surface */
+.pill {
+  @apply rounded-full bg-white/85 backdrop-blur border border-white/70 shadow-soft;
+}
+.card {
+  @apply rounded-2xl bg-white/85 backdrop-blur border border-white/70 shadow-card;
+}
