@@ -51,10 +51,14 @@ export default function TranscriptColumn() {
                 appendTranscript({ id: uid(), text, startedAt, endedAt });
               }
             } catch (err) {
-              pushToast(
-                `Transcription failed: ${(err as Error).message}`,
-                'error',
-              );
+              if (useSession.getState().recording) {
+                pushToast(
+                  `Transcription failed: ${(err as Error).message}`,
+                  'error',
+                );
+              } else {
+                console.warn('Transcription silenced (recording stopped):', (err as Error).message);
+              }
             }
           })();
         },

@@ -1,4 +1,4 @@
-# TwinMind
+# Vigh's Assistant
 
 A three-column live meeting co-pilot, powered entirely by [Groq](https://console.groq.com):
 

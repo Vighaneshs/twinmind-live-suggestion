@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   fullTranscriptLineNumbered,
   recentTranscriptSeconds,
@@ -33,6 +33,7 @@ export default function SuggestionsColumn() {
 
   const runningRef = useRef(false);
   const lastBatchAtRef = useRef(0);
+  const [scrolled, setScrolled] = useState(false);
 
   const runRefresh = useCallback(async (opts?: { manual?: boolean }) => {
     if (runningRef.current) return;
@@ -170,6 +171,8 @@ export default function SuggestionsColumn() {
       }
       useSession.getState().setChatStatus(asstId, 'Composing answer…');
 
+      let pending = '';
+      let rafId: number | null = null;
       await answerDetailed(
         sugg,
         fullTs,
@@ -177,9 +180,17 @@ export default function SuggestionsColumn() {
         webSources ?? [],
         s.settings,
         (delta) => {
-          useSession.getState().appendChatDelta(asstId, delta);
+          pending += delta;
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              useSession.getState().appendChatDelta(asstId, pending);
+              pending = '';
+              rafId = null;
+            });
+          }
         },
       );
+      if (pending) useSession.getState().appendChatDelta(asstId, pending);
     } catch (err) {
       useSession
         .getState()
@@ -226,7 +237,10 @@ export default function SuggestionsColumn() {
         </div>
       </header>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto px-5 py-4"
+        onScroll={(e) => setScrolled((e.currentTarget as HTMLDivElement).scrollTop > 10)}
+      >
         {refreshing && (
           <div className="mb-5 space-y-2.5">
             {[0, 1, 2].map((i) => (
@@ -247,7 +261,10 @@ export default function SuggestionsColumn() {
         ) : (
           <div className="space-y-6">
             {batches.map((b, idx) => (
-              <div key={b.id}>
+              <div
+                key={b.id}
+                className={`transition-opacity duration-300 ${idx > 0 && !scrolled ? 'opacity-30' : 'opacity-100'}`}
+              >
                 <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-brand-700/50">
                   <span>{idx === 0 ? 'Latest' : `#${batches.length - idx}`}</span>
                   <span className="text-brand-700/20">•</span>

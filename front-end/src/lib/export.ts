@@ -32,7 +32,7 @@ export function buildExportTxt(
 ): string {
   const iso = (ts: number) => new Date(ts).toISOString();
   const lines: string[] = [];
-  lines.push(`TwinMind session — exported ${new Date().toISOString()}`);
+  lines.push(`TwinMind session; exported ${new Date().toISOString()}`);
   lines.push('='.repeat(60));
 
   lines.push('\n## TRANSCRIPT');

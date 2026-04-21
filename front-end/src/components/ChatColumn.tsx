@@ -24,9 +24,18 @@ export default function ChatColumn() {
   const endRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const chatCount = chat.length;
+  const isStreaming = chat.some((m) => m.streaming);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [chat]);
+  }, [chatCount]);
+
+  useEffect(() => {
+    if (isStreaming) {
+      endRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
+    }
+  }, [chat, isStreaming]);
 
   const send = async () => {
     const text = draft.trim();
@@ -91,6 +100,8 @@ export default function ChatColumn() {
       useSession.getState().setChatStatus(asstId, 'Composing answer…');
 
       const history = [...useSession.getState().chat];
+      let pending = '';
+      let rafId: number | null = null;
       await chatStream(
         history,
         fullTs,
@@ -98,9 +109,17 @@ export default function ChatColumn() {
         webSources,
         s.settings,
         (delta) => {
-          useSession.getState().appendChatDelta(asstId, delta);
+          pending += delta;
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              useSession.getState().appendChatDelta(asstId, pending);
+              pending = '';
+              rafId = null;
+            });
+          }
         },
       );
+      if (pending) useSession.getState().appendChatDelta(asstId, pending);
     } catch (err) {
       useSession
         .getState()
@@ -215,7 +234,7 @@ export default function ChatColumn() {
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
             rows={2}
-            placeholder="Ask anything — Enter to send, Shift+Enter for newline"
+            placeholder="Ask anything. Enter to send, Shift+Enter for newline"
             className="flex-1 resize-none bg-transparent px-2 py-1 text-sm text-brand-900 placeholder:text-brand-700/40 focus:outline-none"
           />
           <button

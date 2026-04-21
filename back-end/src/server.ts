@@ -19,7 +19,7 @@ app.get('/health', async () => ({ ok: true, tavilyEnabled }));
 try {
   await app.listen({ port: PORT, host: '0.0.0.0' });
   app.log.info(
-    `twinmind backend on :${PORT} — tavily ${tavilyEnabled ? 'enabled' : 'disabled'}`,
+    `twinmind backend on :${PORT} | tavily ${tavilyEnabled ? 'enabled' : 'disabled'}`,
   );
 } catch (err) {
   app.log.error(err);
