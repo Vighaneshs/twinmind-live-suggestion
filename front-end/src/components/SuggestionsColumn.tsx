@@ -117,7 +117,7 @@ export default function SuggestionsColumn() {
   }, [transcriptLen, recording, settings.refreshIntervalSec, runRefresh]);
 
   const handleCardClick = async (sugg: Suggestion) => {
-    recordClick(sugg.title);
+    setTimeout(() => recordClick(sugg.title), 0);
     const s = useSession.getState();
     if (!s.settings.apiKey) {
       s.pushToast('Add your Groq API key in Settings first.', 'error');
