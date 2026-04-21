@@ -80,21 +80,24 @@ export default function SuggestionsColumn() {
     // drift by the API round-trip each tick (a ~2s call would otherwise skip
     // every other 30s chunk).
     lastBatchAtRef.current = Date.now();
+    const suggestCtx = {
+      ledger: s.ledger,
+      olderWindow,
+      recentWindow,
+      recentlySaid,
+      previousBatch: s.batches[0]?.suggestions ?? [],
+    };
     try {
-      const prevBatch = s.batches[0]?.suggestions ?? [];
-      const suggestions = await suggest(
-        {
-          ledger: s.ledger,
-          olderWindow,
-          recentWindow,
-          recentlySaid,
-          previousBatch: prevBatch,
-        },
-        s.settings,
-      );
+      const suggestions = await suggest(suggestCtx, s.settings);
       s.prependBatch({ id: uid(), createdAt: Date.now(), suggestions });
-    } catch (err) {
-      s.pushToast(`Suggestions failed: ${(err as Error).message}`, 'error');
+    } catch {
+      try {
+        await new Promise((res) => setTimeout(res, 2500));
+        const suggestions = await suggest(suggestCtx, s.settings);
+        s.prependBatch({ id: uid(), createdAt: Date.now(), suggestions });
+      } catch (err) {
+        console.warn('Suggestions failed after retry:', (err as Error).message);
+      }
     } finally {
       runningRef.current = false;
       useSession.getState().setRefreshing(false);
