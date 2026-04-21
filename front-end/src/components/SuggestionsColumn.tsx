@@ -7,6 +7,7 @@ import {
   useSession,
 } from '../store/session';
 import { answerDetailed, planWebQueries, suggest } from '../lib/groq';
+import { recordClick, recentClicks } from '../lib/clickHistory';
 import { scoreChunk } from '../lib/density';
 import { maybeUpdateLedger } from '../lib/ledger';
 import { fetchConfig, searchWeb } from '../lib/web';
@@ -86,6 +87,7 @@ export default function SuggestionsColumn() {
       recentWindow,
       recentlySaid,
       previousBatch: s.batches[0]?.suggestions ?? [],
+      recentClicks: recentClicks(),
     };
     try {
       const suggestions = await suggest(suggestCtx, s.settings);
@@ -115,6 +117,7 @@ export default function SuggestionsColumn() {
   }, [transcriptLen, recording, settings.refreshIntervalSec, runRefresh]);
 
   const handleCardClick = async (sugg: Suggestion) => {
+    recordClick(sugg.title);
     const s = useSession.getState();
     if (!s.settings.apiKey) {
       s.pushToast('Add your Groq API key in Settings first.', 'error');

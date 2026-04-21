@@ -86,6 +86,7 @@ export type SuggestContext = {
   recentWindow: string;
   recentlySaid: string;
   previousBatch: Suggestion[];
+  recentClicks?: string[];
 };
 
 function fmtPreviousBatch(prev: Suggestion[]): string {
@@ -100,12 +101,17 @@ function buildSuggestUserMsg(ctx: SuggestContext): string {
   const older = ctx.olderWindow.trim() || '(none)';
   const recent = ctx.recentWindow.trim() || '(none)';
   const recentlySaid = ctx.recentlySaid.trim() || '(silence)';
+  const clicks = ctx.recentClicks?.filter(Boolean) ?? [];
+  const interestsBlock = clicks.length
+    ? `\n\n[USER INTERESTS]\nTopics this user recently explored (use as a soft bias, do NOT repeat them):\n${clicks.map((t) => `- ${t}`).join('\n')}`
+    : '';
   return (
     `[MEETING LEDGER]\n${ledgerBlock}\n\n` +
     `[OLDER CONTEXT]\n"""\n${older}\n"""\n\n` +
     `[RECENT TRANSCRIPT]\n"""\n${recent}\n"""\n\n` +
     `[RECENTLY SAID]\n"""\n${recentlySaid}\n"""\n\n` +
-    `[PREVIOUS BATCH]\n${fmtPreviousBatch(ctx.previousBatch)}`
+    `[PREVIOUS BATCH]\n${fmtPreviousBatch(ctx.previousBatch)}` +
+    interestsBlock
   );
 }
 
