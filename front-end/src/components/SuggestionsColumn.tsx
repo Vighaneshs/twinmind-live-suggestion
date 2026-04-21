@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { recentTranscript, uid, useSession } from '../store/session';
-import { answerDetailed, suggest } from '../lib/groq';
+import {
+  fullTranscriptLineNumbered,
+  recentTranscriptSeconds,
+  transcriptOlderThan,
+  uid,
+  useSession,
+} from '../store/session';
+import { answerDetailed, planWebQueries, suggest } from '../lib/groq';
+import { scoreChunk } from '../lib/density';
+import { maybeUpdateLedger } from '../lib/ledger';
+import { fetchConfig, searchWeb } from '../lib/web';
 import SuggestionCard from './SuggestionCard';
 import type { Suggestion } from '../lib/types';
 
@@ -18,6 +27,8 @@ export default function SuggestionsColumn() {
   const refreshing = useSession((s) => s.refreshing);
   const settings = useSession((s) => s.settings);
   const transcriptLen = useSession((s) => s.transcript.length);
+  const lastSkipped = useSession((s) => s.lastSkippedRefresh);
+  const lastDensity = useSession((s) => s.lastDensitySignal);
 
   const runningRef = useRef(false);
   const lastBatchAtRef = useRef(0);
@@ -27,8 +38,14 @@ export default function SuggestionsColumn() {
     const s = useSession.getState();
     if (!s.settings.apiKey) return;
 
-    const ctx = recentTranscript(s.settings.suggestionContextChars);
-    if (!ctx.trim()) {
+    const recentlySaid = recentTranscriptSeconds(s.settings.recentlySaidSeconds);
+    const recentWindow = recentTranscriptSeconds(s.settings.recentWindowSeconds);
+    const olderWindow = transcriptOlderThan(
+      s.settings.recentWindowSeconds,
+      Math.max(500, s.settings.suggestionContextChars - recentWindow.length),
+    );
+
+    if (!recentWindow.trim() && !olderWindow.trim()) {
       if (opts?.manual) {
         s.pushToast(
           'No transcript yet — start the mic and let a chunk land first.',
@@ -38,13 +55,44 @@ export default function SuggestionsColumn() {
       return;
     }
 
+    // Density gate — skip if nothing new said since the last batch (unless manual).
+    if (!opts?.manual) {
+      const priorBefore = s.transcript
+        .slice(0, Math.max(0, s.transcript.length - 1))
+        .map((c) => c.text.trim())
+        .filter(Boolean)
+        .join('\n');
+      const latestChunk = s.transcript[s.transcript.length - 1]?.text ?? '';
+      const density = scoreChunk(latestChunk, priorBefore);
+      if (density.score < Math.max(0, s.settings.densityThreshold)) {
+        s.setDensity(density, true);
+        return;
+      }
+      s.setDensity(density, false);
+    }
+
+    // Kick off Janitor non-blocking — does its own debounce.
+    void maybeUpdateLedger();
+
     runningRef.current = true;
     s.setRefreshing(true);
+    // Stamp the attempt time BEFORE the API call so the rate limiter doesn't
+    // drift by the API round-trip each tick (a ~2s call would otherwise skip
+    // every other 30s chunk).
+    lastBatchAtRef.current = Date.now();
     try {
-      const prevTitles = (s.batches[0]?.suggestions ?? []).map((x) => x.title);
-      const suggestions = await suggest(ctx, prevTitles, s.settings);
+      const prevBatch = s.batches[0]?.suggestions ?? [];
+      const suggestions = await suggest(
+        {
+          ledger: s.ledger,
+          olderWindow,
+          recentWindow,
+          recentlySaid,
+          previousBatch: prevBatch,
+        },
+        s.settings,
+      );
       s.prependBatch({ id: uid(), createdAt: Date.now(), suggestions });
-      lastBatchAtRef.current = Date.now();
     } catch (err) {
       s.pushToast(`Suggestions failed: ${(err as Error).message}`, 'error');
     } finally {
@@ -53,10 +101,6 @@ export default function SuggestionsColumn() {
     }
   }, []);
 
-  // Trigger refresh when a new transcript chunk arrives, rate-limited to the
-  // configured refresh interval. This guarantees every suggestion batch is
-  // based on fresh transcript (instead of a blind timer that may race the
-  // incoming chunk and see an empty transcript).
   useEffect(() => {
     if (!recording) return;
     if (transcriptLen === 0) return;
@@ -92,13 +136,44 @@ export default function SuggestionsColumn() {
       createdAt: Date.now(),
       sourceSuggestionId: sugg.id,
       streaming: true,
+      status: `Pinning meeting context for "${sugg.title}"…`,
     });
 
     try {
-      const ctx = recentTranscript(s.settings.detailContextChars);
-      await answerDetailed(sugg, ctx, s.settings, (delta) => {
-        useSession.getState().appendChatDelta(asstId, delta);
-      });
+      const fullTs = fullTranscriptLineNumbered();
+      const recent = recentTranscriptSeconds(s.settings.recentWindowSeconds);
+
+      let webSources: typeof s.chat[number]['webSources'] = [];
+      if (s.settings.enableWebSearch) {
+        const cfg = await fetchConfig();
+        if (cfg.tavilyEnabled) {
+          try {
+            const queries = await planWebQueries(sugg, recent, s.settings);
+            if (queries.length) {
+              useSession.getState().setChatStatus(asstId, 'Searching the web…');
+              webSources = await searchWeb(queries);
+            }
+          } catch (err) {
+            console.warn('Web planner failed:', (err as Error).message);
+          }
+        }
+      }
+
+      if (webSources && webSources.length) {
+        useSession.getState().setChatSources(asstId, webSources);
+      }
+      useSession.getState().setChatStatus(asstId, 'Composing answer…');
+
+      await answerDetailed(
+        sugg,
+        fullTs,
+        s.settings.apiKey ? useSession.getState().ledger : '',
+        webSources ?? [],
+        s.settings,
+        (delta) => {
+          useSession.getState().appendChatDelta(asstId, delta);
+        },
+      );
     } catch (err) {
       useSession
         .getState()
@@ -111,26 +186,38 @@ export default function SuggestionsColumn() {
     }
   };
 
+  const skipHint =
+    lastSkipped && recording && transcriptLen > 0
+      ? lastDensity && lastDensity.newEntities.length > 0
+        ? 'Held — minor update, tap Refresh to force.'
+        : 'Held — nothing new said. Tap Refresh to force.'
+      : '';
+
   return (
     <section className="card flex h-full min-h-0 flex-col overflow-hidden">
       <header className="flex items-center justify-between border-b border-mist-200/70 px-5 py-4">
         <h2 className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-700/70">
           Suggestions
         </h2>
-        <button
-          onClick={() => void runRefresh({ manual: true })}
-          disabled={refreshing}
-          className="flex items-center gap-2 rounded-full bg-white/80 px-3.5 py-1.5 text-xs font-medium text-brand-700 shadow-soft transition hover:bg-white disabled:opacity-50"
-          title="Refresh suggestions"
-        >
-          <span
-            className={refreshing ? 'animate-spin' : ''}
-            aria-hidden="true"
+        <div className="flex flex-col items-end gap-0.5">
+          <button
+            onClick={() => void runRefresh({ manual: true })}
+            disabled={refreshing}
+            className="flex items-center gap-2 rounded-full bg-white/80 px-3.5 py-1.5 text-xs font-medium text-brand-700 shadow-soft transition hover:bg-white disabled:opacity-50"
+            title="Refresh suggestions"
           >
-            ↻
-          </span>
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </button>
+            <span
+              className={refreshing ? 'animate-spin' : ''}
+              aria-hidden="true"
+            >
+              ↻
+            </span>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+          {skipHint && (
+            <span className="text-[10px] text-brand-700/50">{skipHint}</span>
+          )}
+        </div>
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4">

@@ -3,10 +3,13 @@ import { DEFAULT_SETTINGS, useSession } from '../store/session';
 import {
   DEFAULT_CHAT_PROMPT,
   DEFAULT_DETAIL_PROMPT,
+  DEFAULT_LEDGER_PROMPT,
   DEFAULT_SUGGESTION_PROMPT,
+  DEFAULT_WEB_QUERY_PROMPT,
 } from '../lib/prompts';
 import { testApiKey } from '../lib/groq';
-import type { Settings } from '../lib/types';
+import { fetchConfig } from '../lib/web';
+import type { ReasoningEffort, Settings } from '../lib/types';
 
 type KeyStatus = 'idle' | 'testing' | 'ok' | 'bad';
 
@@ -31,6 +34,8 @@ function Field({
 const inputCls =
   'w-full rounded-lg border border-mist-200 bg-white px-3 py-2 text-sm text-brand-900 placeholder:text-brand-700/40 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20';
 
+const EFFORTS: ReasoningEffort[] = ['low', 'medium', 'high'];
+
 export default function SettingsModal() {
   const open = useSession((s) => s.settingsOpen);
   const setOpen = useSession((s) => s.setSettingsOpen);
@@ -41,11 +46,13 @@ export default function SettingsModal() {
 
   const [local, setLocal] = useState<Settings>(settings);
   const [keyStatus, setKeyStatus] = useState<KeyStatus>('idle');
+  const [tavilyEnabled, setTavilyEnabled] = useState<boolean>(false);
 
   useEffect(() => {
     if (open) {
       setLocal(settings);
       setKeyStatus('idle');
+      void fetchConfig().then((cfg) => setTavilyEnabled(cfg.tavilyEnabled));
     }
   }, [open, settings]);
 
@@ -146,6 +153,20 @@ export default function SettingsModal() {
                 onChange={(e) => patch({ chatModel: e.target.value })}
               />
             </Field>
+            <Field label="Ledger model (Janitor)" hint="Cheap model; runs every N chunks.">
+              <input
+                className={inputCls}
+                value={local.ledgerModel}
+                onChange={(e) => patch({ ledgerModel: e.target.value })}
+              />
+            </Field>
+            <Field label="Scout model (web queries)" hint="Tiny classifier call.">
+              <input
+                className={inputCls}
+                value={local.scoutModel}
+                onChange={(e) => patch({ scoutModel: e.target.value })}
+              />
+            </Field>
             <Field label="Chunk length (seconds)">
               <input
                 type="number"
@@ -186,7 +207,7 @@ export default function SettingsModal() {
                 }
               />
             </Field>
-            <Field label="Detailed-answer / chat context (chars)">
+            <Field label="Detail / chat context (chars)">
               <input
                 type="number"
                 min={500}
@@ -200,7 +221,113 @@ export default function SettingsModal() {
                 }
               />
             </Field>
+            <Field label="Recent window (seconds)" hint="Verbatim recent block.">
+              <input
+                type="number"
+                min={10}
+                max={600}
+                className={inputCls}
+                value={local.recentWindowSeconds}
+                onChange={(e) =>
+                  patch({
+                    recentWindowSeconds: Math.max(10, Number(e.target.value) || 120),
+                  })
+                }
+              />
+            </Field>
+            <Field label="Recently-said window (seconds)" hint="Primary trigger block.">
+              <input
+                type="number"
+                min={5}
+                max={120}
+                className={inputCls}
+                value={local.recentlySaidSeconds}
+                onChange={(e) =>
+                  patch({
+                    recentlySaidSeconds: Math.max(5, Number(e.target.value) || 30),
+                  })
+                }
+              />
+            </Field>
+            <Field label="Ledger update every N chunks" hint="Janitor cadence.">
+              <input
+                type="number"
+                min={1}
+                max={20}
+                className={inputCls}
+                value={local.ledgerUpdateChunks}
+                onChange={(e) =>
+                  patch({
+                    ledgerUpdateChunks: Math.max(1, Number(e.target.value) || 3),
+                  })
+                }
+              />
+            </Field>
+            <Field label="Density threshold" hint="Min score to allow an auto-refresh.">
+              <input
+                type="number"
+                min={0}
+                max={5}
+                className={inputCls}
+                value={local.densityThreshold}
+                onChange={(e) =>
+                  patch({
+                    densityThreshold: Math.max(0, Number(e.target.value) || 0),
+                  })
+                }
+              />
+            </Field>
+            <Field label="Suggestion reasoning effort">
+              <select
+                className={inputCls}
+                value={local.suggestionReasoningEffort}
+                onChange={(e) =>
+                  patch({ suggestionReasoningEffort: e.target.value as ReasoningEffort })
+                }
+              >
+                {EFFORTS.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Detail / chat reasoning effort">
+              <select
+                className={inputCls}
+                value={local.detailReasoningEffort}
+                onChange={(e) =>
+                  patch({ detailReasoningEffort: e.target.value as ReasoningEffort })
+                }
+              >
+                {EFFORTS.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </Field>
           </div>
+
+          <Field
+            label="Web search (Tavily)"
+            hint={
+              tavilyEnabled
+                ? 'Backend has TAVILY_API_KEY. Enable to augment detail answers.'
+                : 'Backend has no TAVILY_API_KEY — web search is disabled server-side.'
+            }
+          >
+            <label className="flex items-center gap-2 text-sm text-brand-900">
+              <input
+                type="checkbox"
+                checked={local.enableWebSearch && tavilyEnabled}
+                disabled={!tavilyEnabled}
+                onChange={(e) => patch({ enableWebSearch: e.target.checked })}
+                className="h-4 w-4"
+              />
+              Augment detail answers with web sources
+            </label>
+          </Field>
 
           <PromptField
             label="Live suggestion prompt"
@@ -219,6 +346,18 @@ export default function SettingsModal() {
             value={local.chatPrompt}
             onChange={(v) => patch({ chatPrompt: v })}
             onReset={() => patch({ chatPrompt: DEFAULT_CHAT_PROMPT })}
+          />
+          <PromptField
+            label="Ledger / Janitor prompt"
+            value={local.ledgerPrompt}
+            onChange={(v) => patch({ ledgerPrompt: v })}
+            onReset={() => patch({ ledgerPrompt: DEFAULT_LEDGER_PROMPT })}
+          />
+          <PromptField
+            label="Web-query scout prompt"
+            value={local.webQueryPrompt}
+            onChange={(v) => patch({ webQueryPrompt: v })}
+            onReset={() => patch({ webQueryPrompt: DEFAULT_WEB_QUERY_PROMPT })}
           />
         </div>
 

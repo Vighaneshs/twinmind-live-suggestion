@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { recentTranscript, uid, useSession } from '../store/session';
-import { chatStream } from '../lib/groq';
+import {
+  fullTranscriptLineNumbered,
+  recentTranscriptSeconds,
+  uid,
+  useSession,
+} from '../store/session';
+import { chatStream, planWebQueries } from '../lib/groq';
+import { fetchConfig, searchWeb } from '../lib/web';
 import Markdown from './Markdown';
+import type { Suggestion, WebSource } from '../lib/types';
 
 function fmtTime(ts: number) {
   return new Date(ts).toLocaleTimeString([], {
@@ -49,14 +56,51 @@ export default function ChatColumn() {
       content: '',
       createdAt: Date.now(),
       streaming: true,
+      status: 'Pinning meeting context…',
     });
 
     try {
-      const ctx = recentTranscript(s.settings.detailContextChars);
+      const fullTs = fullTranscriptLineNumbered();
+      const recent = recentTranscriptSeconds(s.settings.recentWindowSeconds);
+      const pseudoCard: Suggestion = {
+        id: 'typed',
+        type: 'answer',
+        title: text.slice(0, 200),
+        preview: text.slice(0, 600),
+      };
+
+      let webSources: WebSource[] = [];
+      if (s.settings.enableWebSearch) {
+        const cfg = await fetchConfig();
+        if (cfg.tavilyEnabled) {
+          try {
+            const queries = await planWebQueries(pseudoCard, recent, s.settings);
+            if (queries.length) {
+              useSession.getState().setChatStatus(asstId, 'Searching the web…');
+              webSources = await searchWeb(queries);
+            }
+          } catch (err) {
+            console.warn('Web planner failed:', (err as Error).message);
+          }
+        }
+      }
+
+      if (webSources.length) {
+        useSession.getState().setChatSources(asstId, webSources);
+      }
+      useSession.getState().setChatStatus(asstId, 'Composing answer…');
+
       const history = [...useSession.getState().chat];
-      await chatStream(history, ctx, s.settings, (delta) => {
-        useSession.getState().appendChatDelta(asstId, delta);
-      });
+      await chatStream(
+        history,
+        fullTs,
+        useSession.getState().ledger,
+        webSources,
+        s.settings,
+        (delta) => {
+          useSession.getState().appendChatDelta(asstId, delta);
+        },
+      );
     } catch (err) {
       useSession
         .getState()
@@ -119,12 +163,42 @@ export default function ChatColumn() {
                     <div className="whitespace-pre-wrap">{m.content}</div>
                   ) : m.content ? (
                     <Markdown variant="light">{m.content}</Markdown>
+                  ) : m.streaming && m.status ? (
+                    <div className="flex items-center gap-2 text-xs italic text-brand-700/70">
+                      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-brand-500" />
+                      {m.status}
+                    </div>
                   ) : m.streaming ? (
                     '…'
                   ) : null}
                   {m.streaming && m.content && (
                     <span className="ml-0.5 inline-block h-3 w-1 animate-pulse bg-current align-middle opacity-60" />
                   )}
+                  {m.role === 'assistant' &&
+                    m.webSources &&
+                    m.webSources.length > 0 && (
+                      <div className="mt-2 border-t border-mist-200/60 pt-2">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-brand-700/60">
+                          Sources
+                        </div>
+                        <ol className="space-y-0.5 text-[11px]">
+                          {m.webSources.map((src, i) => (
+                            <li key={src.url + i} className="flex gap-1.5">
+                              <span className="text-brand-700/50">[{i + 1}]</span>
+                              <a
+                                href={src.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="truncate text-brand-700 underline decoration-brand-500/30 hover:decoration-brand-500"
+                                title={src.title}
+                              >
+                                {src.title || src.url}
+                              </a>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
                 </div>
               </li>
             ))}
