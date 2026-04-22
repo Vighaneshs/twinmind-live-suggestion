@@ -112,7 +112,7 @@ export default function SuggestionsColumn() {
     if (transcriptLen === 0) return;
     const intervalMs = Math.max(5, settings.refreshIntervalSec) * 1000;
     const elapsed = Date.now() - lastBatchAtRef.current;
-    if (lastBatchAtRef.current === 0 || elapsed >= intervalMs) {
+    if (lastBatchAtRef.current === 0 || elapsed >= intervalMs - 1000) {
       void runRefresh();
     }
   }, [transcriptLen, recording, settings.refreshIntervalSec, runRefresh]);
