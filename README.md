@@ -13,7 +13,7 @@ Give executable permission
 Data is not persisted, to allow proper testing. Reload reloads everything. 
 
 A reinforcement learning approach based on the embeddings of the card content could be explored. For now, I just give the context of what the last 5 things clicked by user were. 
-Moreover, more recent suggestions are the one user will focus on during a meeting since the latest context is more important. 
+Moreover, more recent suggestions are the ones, where one user will focus on during a meeting since the latest context is more important. 
 
 Web-search can be enabled/disabled
 
