@@ -103,7 +103,7 @@ function buildSuggestUserMsg(ctx: SuggestContext): string {
   const recentlySaid = ctx.recentlySaid.trim() || '(silence)';
   const clicks = ctx.recentClicks?.filter(Boolean) ?? [];
   const interestsBlock = clicks.length
-    ? `\n\n[USER INTERESTS]\nTopics this user recently explored (use as a soft bias, do NOT repeat them):\n${clicks.map((t) => `- ${t}`).join('\n')}`
+    ? `\n\n[USER INTERESTS]\nTopics this user has explored — surface related unexplored angles, but do NOT suggest the same title or theme again:\n${clicks.map((t) => `- ${t}`).join('\n')}`
     : '';
   return (
     `[MEETING LEDGER]\n${ledgerBlock}\n\n` +

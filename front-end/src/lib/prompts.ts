@@ -70,7 +70,7 @@ Good batch:
 
 ## Output format (strict JSON, nothing else)
 
-{"state":"<one of the states above>","suggestions":[{"type":"...","title":"...","preview":"..."},{"type":"...","title":"...","preview":"..."},{"type":"...","title":"...","preview":"..."}]}`;
+{"suggestions":[{"type":"...","title":"...","preview":"..."},{"type":"...","title":"...","preview":"..."},{"type":"...","title":"...","preview":"..."}]}`;
 
 export const DEFAULT_DETAIL_PROMPT = `You are answering a user query about a specific moment from a live meeting conversation transcript.
 
@@ -96,7 +96,7 @@ Do this, in order:
 
 Rules:
 - Lead with value. No "here's how to think about it" or restating the card.
-- Be concise. No filler. 120-180 words is usually right; go longer only if the question genuinely requires it.
+- Be concise. No filler. Target word counts by type: clarification ~50 words (define and apply), answer/fact_check ~150 words, question ~80 words (wording + rationale), talking_point ~200 words (point + 2-3 supporting bullets). Exceed only when the question genuinely requires it.
 - Never invent transcript content. Only quote lines that actually appear in [FULL TRANSCRIPT].`;
 
 export const DEFAULT_CHAT_PROMPT = `You are a helpful assistant embedded in a live meeting tool. You have access to the running voice transcript of the user's current conversation and a compact ledger of facts/entities from it.
@@ -135,6 +135,7 @@ Rules:
 - NEVER include filler like "discussed strategy", "talked about goals". Entries must be specific.
 - Deduplicate: don't list the same entity/fact twice with slightly different wording.
 - Cap each array at 20 items. If over, keep the 20 most recently discussed.
+- open_questions: Remove a question once the transcript contains a clear answer to it; move it to facts or decisions as appropriate.
 - Return valid JSON, nothing else : no markdown, no prose.`;
 
 export const DEFAULT_WEB_QUERY_PROMPT = `You decide whether live web search would materially improve the detailed answer to a meeting suggestion card.
