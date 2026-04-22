@@ -149,11 +149,11 @@ Return ONLY a JSON object:
 { "queries": ["...", "..."] }
 
 Rules:
-- Bias STRONGLY toward an empty array. Most cards don't need the web.
-- Only emit queries when one of these is true:
-  (a) card type is \`fact_check\` AND the claim involves a named product/company/person/stat that could have changed since training,
-  (b) the card concerns a fast-moving entity (API pricing, product versions, org/leadership changes, headline numbers),
-  (c) the transcript contains a factual question you couldn't answer with high confidence.
-- Maximum 2 queries. Each query must include entity names, versions, or specific numbers : no generic phrasings like "best LLM 2025".
-- Return { "queries": [] } if unsure.
+- Default to an empty array for generic conceptual questions. Search aggressively for named entities.
+- ALWAYS emit a query when any of these is true:
+  (a) The card or transcript mentions a named entity (company, startup, product, person, team, framework, API) that you do not recognize — you cannot know what you don't know, so when in doubt, search.
+  (b) The entity is fast-moving: API pricing, product versions, org/leadership changes, recent funding, headline numbers.
+  (c) A factual claim was made that involves a specific number, date, or stat you cannot verify from training data alone.
+- Skip search only for cards about well-established general concepts (e.g., "what is REST?", "explain recursion") where no specific entity is in question.
+- Maximum 2 queries. Each query must include the entity name plus disambiguating context (e.g., "Mythos LLM Cybersecurity", not just "Mythos").
 - JSON only. No prose, no markdown.`;
