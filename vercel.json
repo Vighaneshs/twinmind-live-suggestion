@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://twinmind-live-suggestion-production.up.railway.app/api/:path*"
+    }
+  ]
+}
