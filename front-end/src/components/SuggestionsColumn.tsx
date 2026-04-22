@@ -34,6 +34,7 @@ export default function SuggestionsColumn() {
   const runningRef = useRef(false);
   const lastBatchAtRef = useRef(0);
   const [scrolled, setScrolled] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const runRefresh = useCallback(async (opts?: { manual?: boolean }) => {
     if (runningRef.current) return;
@@ -118,6 +119,7 @@ export default function SuggestionsColumn() {
   }, [transcriptLen, recording, settings.refreshIntervalSec, runRefresh]);
 
   const handleCardClick = async (sugg: Suggestion) => {
+    setSelectedIds((prev) => { const next = new Set(prev); next.add(sugg.id); return next; });
     setTimeout(() => recordClick(sugg.title), 0);
     const s = useSession.getState();
     if (!s.settings.apiKey) {
@@ -276,6 +278,7 @@ export default function SuggestionsColumn() {
                       key={s.id}
                       suggestion={s}
                       onClick={() => void handleCardClick(s)}
+                      selected={selectedIds.has(s.id)}
                     />
                   ))}
                 </div>

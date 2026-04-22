@@ -26,6 +26,7 @@ export default function ChatColumn() {
 
   const chatCount = chat.length;
   const isStreaming = chat.some((m) => m.streaming);
+  const lastSuggestionUserMsgId = chat.filter((m) => m.role === 'user' && m.sourceSuggestionId).at(-1)?.id;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -36,6 +37,12 @@ export default function ChatColumn() {
       endRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' });
     }
   }, [chat, isStreaming]);
+
+  useEffect(() => {
+    if (lastSuggestionUserMsgId) {
+      textareaRef.current?.focus();
+    }
+  }, [lastSuggestionUserMsgId]);
 
   const send = async () => {
     const text = draft.trim();
@@ -193,6 +200,14 @@ export default function ChatColumn() {
                   {m.streaming && m.content && (
                     <span className="ml-0.5 inline-block h-3 w-1 animate-pulse bg-current align-middle opacity-60" />
                   )}
+                  {m.role === 'assistant' && !m.streaming && m.content && (
+                    <button
+                      onClick={() => textareaRef.current?.focus()}
+                      className="mt-2 text-[11px] font-medium text-brand-500/70 hover:text-brand-500 transition"
+                    >
+                      ↩ Ask a follow-up
+                    </button>
+                  )}
                   {m.role === 'assistant' &&
                     m.webSources &&
                     m.webSources.length > 0 && (
@@ -234,7 +249,7 @@ export default function ChatColumn() {
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onKeyDown}
             rows={2}
-            placeholder="Ask anything. Enter to send, Shift+Enter for newline"
+            placeholder={chat.length > 0 ? 'Ask a follow-up… (Enter to send)' : 'Ask anything. Enter to send, Shift+Enter for newline'}
             className="flex-1 resize-none bg-transparent px-2 py-1 text-sm text-brand-900 placeholder:text-brand-700/40 focus:outline-none"
           />
           <button

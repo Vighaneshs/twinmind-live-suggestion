@@ -29,15 +29,22 @@ const TYPE_META: Record<
 export default function SuggestionCard({
   suggestion,
   onClick,
+  selected,
 }: {
   suggestion: Suggestion;
   onClick: () => void;
+  selected?: boolean;
 }) {
   const meta = TYPE_META[suggestion.type];
   return (
     <button
       onClick={onClick}
-      className="group block w-full rounded-xl border border-mist-200/80 bg-white/80 p-4 text-left shadow-soft transition hover:-translate-y-0.5 hover:border-brand-500/40 hover:bg-white hover:shadow-card"
+      className={[
+        'group block w-full rounded-xl border p-4 text-left shadow-soft transition',
+        selected
+          ? 'border-brand-500/50 bg-brand-50/70 ring-2 ring-brand-500/30'
+          : 'border-mist-200/80 bg-white/80 hover:-translate-y-0.5 hover:border-brand-500/40 hover:bg-white hover:shadow-card',
+      ].join(' ')}
     >
       <div className="mb-2 flex items-center gap-2">
         <span
@@ -45,6 +52,11 @@ export default function SuggestionCard({
         >
           {meta.label}
         </span>
+        {selected && (
+          <span className="ml-auto text-[10px] font-semibold text-brand-500">
+            ✓ Answered
+          </span>
+        )}
       </div>
       <div className="mb-1.5 text-sm font-semibold leading-snug text-brand-900">
         {suggestion.title}
@@ -52,9 +64,11 @@ export default function SuggestionCard({
       <p className="text-xs leading-relaxed text-brand-700/80">
         {suggestion.preview}
       </p>
-      <div className="mt-2 text-[11px] font-medium text-brand-500 opacity-0 transition group-hover:opacity-100">
-        Tap for a detailed answer →
-      </div>
+      {!selected && (
+        <div className="mt-2 text-[11px] font-medium text-brand-500 opacity-0 transition group-hover:opacity-100">
+          Tap for a detailed answer →
+        </div>
+      )}
     </button>
   );
 }
